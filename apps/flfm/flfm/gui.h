@@ -1,0 +1,57 @@
+#ifndef gui_h
+#define gui_h
+
+#include <FL/Fl_Window.H>
+#include <FL/Fl.H>
+#include <FL/x.H>
+#include <FL/Fl_Menu_Item.H>
+#include <FL/Fl_Output.H>
+#include <FL/Fl_Menu_Bar.H>
+#include <FL/Fl_Menu_Button.H>
+#include "Location.h"
+#include "IconCanvas.h"
+
+
+extern Atom XdndActionAsk;
+extern Atom XdndActionCopy;
+extern Atom XdndActionMove;
+extern Atom XdndActionLink;
+extern Atom fl_dnd_source_action;
+extern Atom fl_dnd_action;
+extern Window fl_dnd_source_window;
+extern Atom fl_XdndActionCopy;
+extern Atom fl_XdndStatus;
+
+enum {
+	DND_MOVE = 1,
+	DND_LINK,
+	DND_COPY,
+	DND_ASK
+};
+
+class GUI : public Fl_Window {
+public:
+	Fl_Menu_Item *mnu;
+	Fl_Menu_Bar *mnu_bar;
+	Location *loc_inp;
+	Fl_Group *icon_can;
+	Fl_Output *stat_bar;
+	Fl_Font font;
+	int size;
+	Fl_Menu_Button *dnd_menu;
+	Fl_Menu_Item *dnd_items;
+	static int dnd_action;
+	Fl_Widget *dnd_target;
+
+	GUI(int X, int Y, int W, int H);
+	~GUI();
+	void create_layout(void);
+	void create_menu(void);
+	int handle(int e);
+	int dnd_move(void);
+	int dnd_release(int a);
+	static void dnd_cb(Fl_Widget *w, void *d);
+};
+
+
+#endif
