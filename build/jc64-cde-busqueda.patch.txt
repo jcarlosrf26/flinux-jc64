@@ -1,0 +1,74 @@
+--- sysroot/usr/bin/tce-setup	2026-06-23 13:51:33.000000000 +0000
++++ prod/usr/bin/tce-setup	2026-10-08 18:22:49.087675527 +0000
+@@ -161,6 +161,71 @@
+ 	process_CD
+ fi
+ 
++# --- flinux-jc64: busqueda robusta del CDE (Ventoy y pendrive tardio) ---
++# La busqueda anterior es de un solo intento sobre el /etc/fstab ya
++# congelado por rebuildfstab. En hardware lento (p.ej. la Dell
++# Inspiron 1545 de Juanca) las particiones del pendrive pueden no
++# existir aun en ese instante, y Ventoy ademas guarda la ISO como
++# fichero en su particion (su CD es virtual, no un /dev/sr*): el CDE
++# no aparece jamas y el sistema cae a consola (tcloop=0).
++# Este bloque SOLO corre si las rutas anteriores no encontraron CDE:
++# rehace el fstab y reintenta (1) el dispositivo mapper de Ventoy,
++# (2) el autoscan clasico, (3) los ficheros .iso en los dispositivos
++# (montaje loop del ISO, estilo fromISOfile). Acotado a 12 pasadas;
++# no altera el arranque desde CD ni desde USB grabado con dd, donde
++# el CDE ya se encuentra en las rutas clasicas mucho antes de aqui.
++if [ "$CDE" -a -z "$CDELIST" ]; then
++	FLRETRY=0
++	mkdir -p /mnt/vtoyiso 2>/dev/null
++	while [ $FLRETRY -lt 20 -a -z "$CDELIST" ]; do
++		udevadm settle --timeout 5 2>/dev/null
++		/usr/sbin/rebuildfstab >/dev/null 2>&1
++		# (1) dispositivo virtual de Ventoy (mapper / dm-*)
++		for VDEV in /dev/mapper/ventoy /dev/dm-*; do
++			[ -b "$VDEV" ] || continue
++			mkdir -p /mnt/vtoyiso 2>/dev/null
++			if mount -t iso9660 -o ro "$VDEV" /mnt/vtoyiso 2>/dev/null && [ -s /mnt/vtoyiso/cde/"$TARGETLIST" ]; then
++				LOADFROM=/mnt/vtoyiso/cde/optional
++				CDELIST=/mnt/vtoyiso/cde/"$TARGETLIST"
++				process "$CDELIST"
++				echo "$LOADFROM" > /etc/sysconfig/cde
++				break
++			fi
++			umount /mnt/vtoyiso 2>/dev/null
++		done
++		# (2) pseudo CD clasico, ya con el fstab rehecho
++		if [ -z "$CDELIST" ]; then
++			DEV="$(tc_autoscan 'cde' 'd')"
++			[ -n "$DEV" ] && process_CD
++		fi
++		# (3) la ISO como fichero dentro de un pendrive (caso Ventoy)
++		if [ -z "$CDELIST" ]; then
++			for MP in /mnt/*; do
++				[ -d "$MP" ] || continue
++				case "$MP" in /mnt/vtoyiso|/mnt/test) continue ;; esac
++				mount "$MP" >/dev/null 2>&1 || continue
++				for VISO in "$MP"/*.iso "$MP"/*/*.iso; do
++					[ -f "$VISO" ] || continue
++					if mount -t iso9660 -o ro,loop "$VISO" /mnt/vtoyiso 2>/dev/null || mount -t iso9660 -o ro "$VISO" /mnt/vtoyiso 2>/dev/null; then
++						if [ -s /mnt/vtoyiso/cde/"$TARGETLIST" ]; then
++							LOADFROM=/mnt/vtoyiso/cde/optional
++							CDELIST=/mnt/vtoyiso/cde/"$TARGETLIST"
++							process "$CDELIST"
++							echo "$LOADFROM" > /etc/sysconfig/cde
++							break 2
++						fi
++						umount /mnt/vtoyiso 2>/dev/null
++					fi
++				done
++				umount "$MP" >/dev/null 2>&1
++			done
++		fi
++		[ -z "$CDELIST" ] && sleep 3
++		FLRETRY=$((FLRETRY+1))
++	done
++	rmdir /mnt/vtoyiso 2>/dev/null
++fi
++
+ # Wrap up by performing updates as may be needed.
+ if [ -e /etc/sysconfig/newmodules ]; then
+ 	depmod -a 2>/dev/null
